@@ -10,7 +10,7 @@ Deliver a lightweight Java bytecode to browser runtime toolchain that can load `
 - Emit a browser-friendly JavaScript bundle containing:
   - Bytecode IR data for each translated method.
   - A minimal stack machine runtime to execute the IR.
-  - A small stdlib shim for basic Java types (currently `java/lang/Object`, primitive wrappers, and simple arrays).
+  - A small stdlib shim for basic Java types (currently `java/lang/Object`, primitive wrappers, and primitive/reference arrays).
 - Provide hooks for plugging in host functions (e.g., rendering, input) via a bridge API.
 - Include a smoke test that exercises the pipeline on a toy `.jar` with arithmetic and branching.
 
@@ -25,3 +25,8 @@ Deliver a lightweight Java bytecode to browser runtime toolchain that can load `
 - End-to-end CLI run produces a runnable JS bundle under 150 KB for the sample jar.
 - Runtime startup under 200 ms in Node for the sample jar (measured via script).
 - Documentation sufficient for another engineer to extend opcode coverage and host bridges.
+
+## Incremental Plan
+- **Phase 1 (✅)** – Object instantiation, static/instance fields, and primitive/reference array opcodes.
+- **Phase 2** – Exception tables, `ATHROW`, and try/catch dispatch in the interpreter.
+- **Phase 3** – Reflection metadata plus bridge surfaces for WebGL/WebAudio/WebSocket/File APIs.
