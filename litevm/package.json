@@ -1,0 +1,23 @@
+{
+  "name": "litevm",
+  "version": "0.1.0",
+  "description": "Lightweight Java bytecode to JavaScript pipeline built around a tiny stack-machine runtime.",
+  "type": "module",
+  "bin": {
+    "litevm": "bin/litevm"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node src/cli.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "java",
+    "bytecode",
+    "javascript",
+    "compiler",
+    "runtime"
+  ],
+  "author": "",
+  "license": "MIT"
+}
