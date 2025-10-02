@@ -9,6 +9,7 @@ import { compileJar } from '../src/pipeline.js';
 
 const SAMPLE_JAVA = new URL('../samples/Sample.java', import.meta.url);
 const OBJECT_SAMPLE_JAVA = new URL('../samples/ObjectSample.java', import.meta.url);
+const ARRAY_SAMPLE_JAVA = new URL('../samples/ArraySample.java', import.meta.url);
 
 function run(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -39,6 +40,7 @@ test('compiles sample jar and executes add method', async (t) => {
     classesDir,
     fileURLToPath(SAMPLE_JAVA),
     fileURLToPath(OBJECT_SAMPLE_JAVA),
+    fileURLToPath(ARRAY_SAMPLE_JAVA),
   ]);
   await run('jar', ['cf', jarPath, '-C', classesDir, '.']);
 
@@ -78,4 +80,32 @@ test('compiles sample jar and executes add method', async (t) => {
     object,
   );
   assert.equal(counter, 99);
+
+  const intArray = runtime.invokeStatic(
+    'ArraySample',
+    'create',
+    '(I)[I',
+    [4],
+  );
+  assert.ok(intArray?.__litevmArray, 'expected array instance');
+  assert.equal(intArray.length, 4);
+  assert.deepEqual(intArray.data.slice(0, 4), [0, 2, 4, 6]);
+
+  const sum = runtime.invokeStatic(
+    'ArraySample',
+    'sum',
+    '([I)I',
+    [intArray],
+  );
+  assert.equal(sum, 12);
+
+  const objectArray = runtime.invokeStatic(
+    'ArraySample',
+    'createObjects',
+    '(I)[Ljava/lang/Object;',
+    [3],
+  );
+  assert.ok(objectArray?.__litevmArray, 'expected object array instance');
+  assert.equal(objectArray.length, 3);
+  assert.equal(objectArray.data[0]?.__litevmClass, 'java/lang/Object');
 });

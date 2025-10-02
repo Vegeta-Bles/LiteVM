@@ -129,6 +129,9 @@ export class LiteVMRuntime {
       case 'ACONST_NULL':
         frame.stack.push(null);
         return;
+      case 'ACONST_NULL':
+        frame.stack.push(null);
+        return;
       case 'ICONST':
       case 'BIPUSH':
       case 'SIPUSH': {
@@ -140,6 +143,22 @@ export class LiteVMRuntime {
         const ref = args[0];
         const object = this._allocateObject(ref?.className || 'java/lang/Object');
         frame.stack.push(object);
+        return;
+      }
+      case 'NEWARRAY': {
+        const length = frame.stack.pop() | 0;
+        const typeInfo = args[0];
+        const descriptor = typeInfo?.descriptor || this._descriptorFromPrimitiveToken(typeInfo?.token || typeInfo?.value || 'int');
+        const array = this._allocateArray(descriptor, length);
+        frame.stack.push(array);
+        return;
+      }
+      case 'ANEWARRAY': {
+        const length = frame.stack.pop() | 0;
+        const typeInfo = args[0];
+        const descriptor = typeInfo?.descriptor || 'Ljava/lang/Object;';
+        const array = this._allocateArray(descriptor, length);
+        frame.stack.push(array);
         return;
       }
       case 'LDC': {
@@ -236,6 +255,39 @@ export class LiteVMRuntime {
       case 'DUP': {
         const top = frame.stack.at(-1);
         frame.stack.push(top);
+        return;
+      }
+      case 'ARRAYLENGTH': {
+        const arrayRef = frame.stack.pop();
+        frame.stack.push(this._arrayLength(arrayRef));
+        return;
+      }
+      case 'IALOAD':
+      case 'LALOAD':
+      case 'FALOAD':
+      case 'DALOAD':
+      case 'BALOAD':
+      case 'CALOAD':
+      case 'SALOAD':
+      case 'AALOAD': {
+        const index = frame.stack.pop() | 0;
+        const arrayRef = frame.stack.pop();
+        const value = this._arrayLoad(arrayRef, this._arrayOpType(op), index);
+        frame.stack.push(value);
+        return;
+      }
+      case 'IASTORE':
+      case 'LASTORE':
+      case 'FASTORE':
+      case 'DASTORE':
+      case 'BASTORE':
+      case 'CASTORE':
+      case 'SASTORE':
+      case 'AASTORE': {
+        const value = frame.stack.pop();
+        const index = frame.stack.pop() | 0;
+        const arrayRef = frame.stack.pop();
+        this._arrayStore(arrayRef, this._arrayOpType(op), index, value);
         return;
       }
       case 'GOTO': {
@@ -489,6 +541,132 @@ export class LiteVMRuntime {
         return 0;
       default:
         return null;
+    }
+  }
+
+  _descriptorFromPrimitiveToken(token = 'int') {
+    switch (String(token).toLowerCase()) {
+      case 'boolean':
+        return 'Z';
+      case 'byte':
+        return 'B';
+      case 'char':
+        return 'C';
+      case 'short':
+        return 'S';
+      case 'long':
+        return 'J';
+      case 'float':
+        return 'F';
+      case 'double':
+        return 'D';
+      default:
+        return 'I';
+    }
+  }
+
+  _allocateArray(componentDescriptor, length) {
+    if (length < 0) {
+      throw new Error('Negative array size');
+    }
+    const id = this.nextObjectId++;
+    const defaultValue = this._defaultValue(componentDescriptor);
+    const data = new Array(length).fill(defaultValue);
+    const array = {
+      __litevmId: id,
+      __litevmArray: true,
+      componentType: componentDescriptor,
+      length,
+      data,
+    };
+    this.heap.set(id, array);
+    return array;
+  }
+
+  _assertArray(ref) {
+    if (!ref || typeof ref !== 'object' || !ref.__litevmArray) {
+      throw new Error('Array reference expected');
+    }
+  }
+
+  _arrayLength(ref) {
+    this._assertArray(ref);
+    return ref.length;
+  }
+
+  _arrayLoad(ref, type, index) {
+    const array = this._ensureArrayBounds(ref, index);
+    const value = array.data[index];
+    if (type === 'I' || type === 'B' || type === 'S' || type === 'C') {
+      return value | 0;
+    }
+    if (type === 'Z') {
+      return value ? 1 : 0;
+    }
+    return value;
+  }
+
+  _arrayStore(ref, type, index, value) {
+    const array = this._ensureArrayBounds(ref, index);
+    array.data[index] = this._coerceArrayValue(type, value);
+  }
+
+  _ensureArrayBounds(ref, index) {
+    this._assertArray(ref);
+    if (index < 0 || index >= ref.length) {
+      throw new Error('Array index out of bounds');
+    }
+    return ref;
+  }
+
+  _coerceArrayValue(type, value) {
+    switch (type) {
+      case 'I':
+      case 'S':
+      case 'C':
+        return value | 0;
+      case 'B':
+        return (value | 0) & 0xff;
+      case 'Z':
+        return value ? 1 : 0;
+      case 'J':
+        return typeof value === 'bigint' ? value : BigInt(value || 0);
+      case 'F':
+      case 'D':
+        return Number(value);
+      case 'A':
+      default:
+        return value;
+    }
+  }
+
+  _arrayOpType(op) {
+    switch (op) {
+      case 'IALOAD':
+      case 'IASTORE':
+        return 'I';
+      case 'LALOAD':
+      case 'LASTORE':
+        return 'J';
+      case 'FALOAD':
+      case 'FASTORE':
+        return 'F';
+      case 'DALOAD':
+      case 'DASTORE':
+        return 'D';
+      case 'BALOAD':
+      case 'BASTORE':
+        return 'B';
+      case 'SALOAD':
+      case 'SASTORE':
+        return 'S';
+      case 'CALOAD':
+      case 'CASTORE':
+        return 'C';
+      case 'AALOAD':
+      case 'AASTORE':
+      default:
+        return 'A';
     }
   }
 }

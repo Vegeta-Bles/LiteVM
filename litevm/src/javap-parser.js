@@ -1,5 +1,5 @@
 const HEADER_CLASS_REGEX = /class\s+([^\s{]+)(?:\s+extends\s+([^\s{]+))?/;
-const METHOD_SIGNATURE_REGEX = /^(?:\s*)(?:public|private|protected|static|final|synchronized|native|abstract|strictfp|default|\w+\s+)*([\w$<>]+)\(([^)]*)\);/;
+const METHOD_SIGNATURE_REGEX = /^(?:\s*)(?:[\w\[\]$.<>]+\s+)*([\w$<>]+)\(([^)]*)\);/;
 
 export function parseJavapDisassembly(text) {
   const lines = text.split(/\r?\n/);
@@ -115,7 +115,9 @@ export function parseJavapDisassembly(text) {
         trimmed.startsWith('LineNumberTable') ||
         trimmed.startsWith('LocalVariableTable') ||
         trimmed.startsWith('Exceptions:') ||
-        trimmed.startsWith('RuntimeVisibleAnnotations:')
+        trimmed.startsWith('RuntimeVisibleAnnotations:') ||
+        trimmed.startsWith('RuntimeInvisibleAnnotations:') ||
+        trimmed.startsWith('StackMapTable')
       ) {
         if (currentMethod.instructions.length) {
           ir.methods.push(currentMethod);

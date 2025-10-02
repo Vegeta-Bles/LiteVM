@@ -111,8 +111,13 @@ function normalizeInstruction(instr, offsetMap, className) {
       normalized.args = [parseMethodReference(comment, ownerClass || className || null)];
       break;
     case 'NEW':
-    case 'ANEWARRAY':
       normalized.args = [parseTypeReference(comment)];
+      break;
+    case 'NEWARRAY':
+      normalized.args = [buildPrimitiveArrayArg(args)];
+      break;
+    case 'ANEWARRAY':
+      normalized.args = [buildReferenceArrayArg(comment, ownerClass || className || null)];
       break;
     default:
       normalized.args = args;
@@ -205,4 +210,57 @@ function parseTypeReference(comment) {
 function buildMeta(comment) {
   if (!comment) return null;
   return { comment };
+}
+
+function buildPrimitiveArrayArg(args) {
+  const token = (args?.[0]?.value ?? 'int').toString().toLowerCase();
+  const descriptor = mapPrimitiveArrayDescriptor(token);
+  return {
+    kind: 'arrayType',
+    primitive: true,
+    token,
+    descriptor,
+  };
+}
+
+function buildReferenceArrayArg(comment, fallbackClassName) {
+  const typeRef = parseTypeReference(comment);
+  if (typeRef.kind === 'class' && typeRef.className) {
+    return {
+      kind: 'arrayType',
+      primitive: false,
+      className: typeRef.className,
+      descriptor: `L${typeRef.className};`,
+    };
+  }
+  const className = fallbackClassName || 'java/lang/Object';
+  return {
+    kind: 'arrayType',
+    primitive: false,
+    className,
+    descriptor: `L${className};`,
+  };
+}
+
+function mapPrimitiveArrayDescriptor(token) {
+  switch (token) {
+    case 'boolean':
+      return 'Z';
+    case 'byte':
+      return 'B';
+    case 'char':
+      return 'C';
+    case 'short':
+      return 'S';
+    case 'int':
+      return 'I';
+    case 'long':
+      return 'J';
+    case 'float':
+      return 'F';
+    case 'double':
+      return 'D';
+    default:
+      return 'I';
+  }
 }

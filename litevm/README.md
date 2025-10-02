@@ -7,7 +7,7 @@ LiteVM is an experimental drop-in alternative to TeaVM designed for rapid build 
 ## Highlights
 - **Zero external dependencies** – relies only on Node.js ≥ 20 and the host JDK (`jar`, `javap`).
 - **Streaming pipeline** – classes are disassembled on demand and transformed into a structured IR for emission.
-- **Tiny runtime** – a ~8 KB JS stack machine executes IR with pluggable bridges for host integration and now supports basic object instantiation, instance/static fields, and reference locals.
+- **Tiny runtime** – a ~8 KB JS stack machine executes IR with pluggable bridges for host integration and now supports basic object instantiation, primitive/reference arrays, instance/static fields, and reference locals.
 - **Modular design** – extend opcode handlers and runtime bridges without touching the CLI.
 
 ## Quick Start

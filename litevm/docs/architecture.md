@@ -13,7 +13,7 @@ The IR is JSON-friendly and structured per class:
 - `className`: fully qualified name (`java/lang/Object`).
 - `superName`: optional parent class (defaults to `java/lang/Object`).
 - `methods`: array of methods with `name`, `descriptor`, `maxStack`, `maxLocals`, and `instructions`.
-- `instructions`: array of `{ op: string, args: any[] }` tuples, enriched with metadata extracted from `javap` comments (method/field references are fully qualified, even when `javap` elides the class name).
+- `instructions`: array of `{ op: string, args: any[] }` tuples, enriched with metadata extracted from `javap` comments (method/field references are fully qualified, even when `javap` elides the class name). Array creation instructions (`NEWARRAY`, `ANEWARRAY`) capture component descriptors so the runtime can allocate correctly typed heaps.
 
 Example snippet:
 
@@ -45,7 +45,7 @@ The generated bundle embeds:
   - A stack array and frame pointer.
   - Opcode handlers keyed by mnemonic (see `runtime/runtime.js`).
   - Local variable storage per frame and branch dispatch via pre-resolved instruction indices.
-  - A tiny heap/object model: `NEW`, `ALOAD/ASTORE`, `GETFIELD/PUTFIELD`, and `GETSTATIC/PUTSTATIC` are executed against JS-backed structures with sensible JVM default values.
+  - A tiny heap/object/array model: `NEW`, `ALOAD/ASTORE`, `NEWARRAY/ANEWARRAY`, `ARRAYLENGTH`, `xALOAD/xASTORE`, `GETFIELD/PUTFIELD`, and `GETSTATIC/PUTSTATIC` are executed against JS-backed structures with sensible JVM default values.
 - A `Bridge` API that lets host code plug in native functions (e.g., rendering hooks).
 - A manifest mapping class + method descriptors to instruction arrays.
 
