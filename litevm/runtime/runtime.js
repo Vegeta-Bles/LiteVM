@@ -7,6 +7,8 @@ export class LiteVMRuntime {
     this.classes = new Map();
     this.bridges = new Map();
     this.staticFields = new Map();
+    this.heap = new Map();
+    this.nextObjectId = 1;
 
     for (const cls of manifest) {
       const normalizedName = cls.className.replace(/\\\\/g, '/');
@@ -23,6 +25,19 @@ export class LiteVMRuntime {
     this.bridges.set(this._bridgeKey(className, signature), handler);
   }
 
+  invokeVirtual(className, methodName, descriptor, instance, args = []) {
+    const method = this._resolveVirtualTarget(
+      instance?.__litevmClass || className,
+      className,
+      methodName,
+      descriptor,
+    );
+    if (!method) {
+      throw new Error(`Unknown virtual method ${className}.${methodName}${descriptor}`);
+    }
+    return this._executeMethod({ method, args, instance });
+  }
+
   invokeStatic(className, methodName, descriptor, args = []) {
     const method = this._lookupMethod(className, methodName, descriptor);
     if (!method) {
@@ -37,9 +52,35 @@ export class LiteVMRuntime {
   }
 
   _lookupMethod(className, methodName, descriptor) {
-    const cls = this._lookupClass(className);
-    if (!cls) return null;
-    return cls.methods.get(this._methodKey(methodName, descriptor)) || null;
+    let cls = this._lookupClass(className);
+    const key = this._methodKey(methodName, descriptor);
+    while (cls) {
+      const method = cls.methods.get(key);
+      if (method) {
+        return method;
+      }
+      if (!cls.superName || cls.superName === cls.className) {
+        break;
+      }
+      cls = this._lookupClass(cls.superName);
+    }
+    return null;
+  }
+
+  _resolveVirtualTarget(instanceClassName, declaredClassName, methodName, descriptor) {
+    if (instanceClassName) {
+      const method = this._lookupMethod(instanceClassName, methodName, descriptor);
+      if (method) {
+        return method;
+      }
+    }
+    if (declaredClassName && declaredClassName !== instanceClassName) {
+      const method = this._lookupMethod(declaredClassName, methodName, descriptor);
+      if (method) {
+        return method;
+      }
+    }
+    return null;
   }
 
   _methodKey(name, descriptor) {
@@ -85,11 +126,20 @@ export class LiteVMRuntime {
     switch (op) {
       case 'NOP':
         return;
+      case 'ACONST_NULL':
+        frame.stack.push(null);
+        return;
       case 'ICONST':
       case 'BIPUSH':
       case 'SIPUSH': {
         const value = args[0]?.value ?? 0;
         frame.stack.push(value);
+        return;
+      }
+      case 'NEW': {
+        const ref = args[0];
+        const object = this._allocateObject(ref?.className || 'java/lang/Object');
+        frame.stack.push(object);
         return;
       }
       case 'LDC': {
@@ -101,7 +151,18 @@ export class LiteVMRuntime {
         frame.stack.push(frame.locals[index]);
         return;
       }
+      case 'ALOAD': {
+        const index = args[0]?.value ?? 0;
+        frame.stack.push(frame.locals[index]);
+        return;
+      }
       case 'ISTORE': {
+        const index = args[0]?.value ?? 0;
+        const value = frame.stack.pop();
+        frame.locals[index] = value;
+        return;
+      }
+      case 'ASTORE': {
         const index = args[0]?.value ?? 0;
         const value = frame.stack.pop();
         frame.locals[index] = value;
@@ -127,6 +188,30 @@ export class LiteVMRuntime {
         else if (op === 'IDIV') result = (a / b) | 0;
         else if (op === 'IREM') result = a % b;
         frame.stack.push(result);
+        return;
+      }
+      case 'GETSTATIC': {
+        const ref = args[0];
+        frame.stack.push(this._getStaticField(ref));
+        return;
+      }
+      case 'PUTSTATIC': {
+        const ref = args[0];
+        const value = frame.stack.pop();
+        this._setStaticField(ref, value);
+        return;
+      }
+      case 'GETFIELD': {
+        const ref = args[0];
+        const instance = frame.stack.pop();
+        frame.stack.push(this._getInstanceField(instance, ref));
+        return;
+      }
+      case 'PUTFIELD': {
+        const ref = args[0];
+        const value = frame.stack.pop();
+        const instance = frame.stack.pop();
+        this._setInstanceField(instance, ref, value);
         return;
       }
       case 'INEG': {
@@ -238,14 +323,46 @@ export class LiteVMRuntime {
           callArgs.unshift(frame.stack.pop());
         }
         const instance = frame.stack.pop();
-        const bridgeKey = this._bridgeKey(ref.className, `${ref.methodName}:${ref.descriptor}`);
-        const bridge = this.bridges.get(bridgeKey);
-        if (!bridge) {
-          throw new Error(`No bridge registered for virtual call ${ref.className}.${ref.methodName}${ref.descriptor}`);
+        const targetMethod = this._resolveVirtualTarget(
+          instance?.__litevmClass || ref.className,
+          ref.className,
+          ref.methodName,
+          ref.descriptor,
+        );
+        let value;
+        if (targetMethod) {
+          value = this._executeMethod({ method: targetMethod, args: callArgs, instance });
+        } else {
+          const bridgeKey = this._bridgeKey(ref.className, `${ref.methodName}:${ref.descriptor}`);
+          const bridge = this.bridges.get(bridgeKey);
+          if (!bridge) {
+            throw new Error(`No target found for virtual call ${ref.className}.${ref.methodName}${ref.descriptor}`);
+          }
+          value = bridge(instance, callArgs);
         }
-        const value = bridge(instance, callArgs);
         if (!this._isVoidDescriptor(ref.descriptor)) {
           frame.stack.push(value);
+        }
+        return;
+      }
+      case 'INVOKESPECIAL': {
+        const ref = args[0];
+        const argCount = this._descriptorArgCount(ref.descriptor);
+        const callArgs = [];
+        for (let i = 0; i < argCount; i += 1) {
+          callArgs.unshift(frame.stack.pop());
+        }
+        const instance = frame.stack.pop();
+        const targetMethod = this._lookupMethod(ref.className, ref.methodName, ref.descriptor);
+        if (!targetMethod) {
+          if (ref.className === 'java/lang/Object' && ref.methodName === '<init>') {
+            return;
+          }
+          throw new Error(`Missing special target ${ref.className}.${ref.methodName}${ref.descriptor}`);
+        }
+        const result = this._executeMethod({ method: targetMethod, args: callArgs, instance });
+        if (!this._isVoidDescriptor(ref.descriptor)) {
+          frame.stack.push(result);
         }
         return;
       }
@@ -302,5 +419,76 @@ export class LiteVMRuntime {
 
   _isVoidDescriptor(descriptor) {
     return descriptor.endsWith(')V');
+  }
+
+  _allocateObject(className) {
+    const id = this.nextObjectId++;
+    const object = {
+      __litevmId: id,
+      __litevmClass: className,
+      fields: Object.create(null),
+    };
+    this.heap.set(id, object);
+    return object;
+  }
+
+  _fieldKey(ref) {
+    if (!ref) return 'unknown#field';
+    return `${ref.className || 'unknown'}#${ref.fieldName || 'field'}`;
+  }
+
+  _getStaticField(ref) {
+    const key = this._fieldKey(ref);
+    if (!this.staticFields.has(key)) {
+      this.staticFields.set(key, this._defaultValue(ref?.descriptor));
+    }
+    return this.staticFields.get(key);
+  }
+
+  _setStaticField(ref, value) {
+    const key = this._fieldKey(ref);
+    this.staticFields.set(key, value);
+  }
+
+  _assertInstance(instance) {
+    if (!instance || typeof instance !== 'object' || !('__litevmClass' in instance)) {
+      throw new Error('Attempted to access field on non-object value');
+    }
+  }
+
+  _getInstanceField(instance, ref) {
+    this._assertInstance(instance);
+    const fieldName = ref?.fieldName;
+    const descriptor = ref?.descriptor;
+    if (!(fieldName in instance.fields)) {
+      instance.fields[fieldName] = this._defaultValue(descriptor);
+    }
+    return instance.fields[fieldName];
+  }
+
+  _setInstanceField(instance, ref, value) {
+    this._assertInstance(instance);
+    const fieldName = ref?.fieldName;
+    instance.fields[fieldName] = value;
+  }
+
+  _defaultValue(descriptor = 'Ljava/lang/Object;') {
+    if (!descriptor) return null;
+    const typeChar = descriptor[0];
+    switch (typeChar) {
+      case 'Z': // boolean
+      case 'B': // byte
+      case 'C': // char
+      case 'S': // short
+      case 'I':
+        return 0;
+      case 'J':
+        return 0n;
+      case 'F':
+      case 'D':
+        return 0;
+      default:
+        return null;
+    }
   }
 }

@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { compileJar } from '../src/pipeline.js';
 
 const SAMPLE_JAVA = new URL('../samples/Sample.java', import.meta.url);
+const OBJECT_SAMPLE_JAVA = new URL('../samples/ObjectSample.java', import.meta.url);
 
 function run(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -33,7 +34,12 @@ test('compiles sample jar and executes add method', async (t) => {
   });
 
   await mkdir(classesDir, { recursive: true });
-  await run('javac', ['-d', classesDir, fileURLToPath(SAMPLE_JAVA)]);
+  await run('javac', [
+    '-d',
+    classesDir,
+    fileURLToPath(SAMPLE_JAVA),
+    fileURLToPath(OBJECT_SAMPLE_JAVA),
+  ]);
   await run('jar', ['cf', jarPath, '-C', classesDir, '.']);
 
   const result = await compileJar({
@@ -53,4 +59,23 @@ test('compiles sample jar and executes add method', async (t) => {
   const runtime = runtimeModule.default;
   const value = runtime.invokeStatic('Sample', 'add', '(II)I', [7, 35]);
   assert.equal(value, 42);
+
+  const object = runtime.invokeStatic(
+    'ObjectSample',
+    'create',
+    '(I)LObjectSample;',
+    [99],
+  );
+
+  assert.ok(object, 'expected object instance from factory');
+  assert.equal(object.__litevmClass, 'ObjectSample');
+  assert.equal(object.fields.counter, 99);
+
+  const counter = runtime.invokeVirtual(
+    'ObjectSample',
+    'getCounter',
+    '()I',
+    object,
+  );
+  assert.equal(counter, 99);
 });

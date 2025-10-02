@@ -6,18 +6,18 @@ function normalizeClass(irClass) {
   return {
     className: irClass.className,
     superName: irClass.superName,
-    methods: irClass.methods.map(normalizeMethod)
+    methods: irClass.methods.map((method) => normalizeMethod(method, irClass.className))
   };
 }
 
-function normalizeMethod(method) {
+function normalizeMethod(method, className) {
   const offsetMap = new Map();
   method.instructions.forEach((instr, index) => {
     offsetMap.set(instr.offset, index);
   });
 
   const instructions = method.instructions.map((instr) =>
-    normalizeInstruction(instr, offsetMap)
+    normalizeInstruction(instr, offsetMap, className)
   );
 
   // Resolve branch targets to indices for faster runtime jumps
@@ -42,12 +42,13 @@ function normalizeMethod(method) {
     maxStack: method.maxStack,
     maxLocals: method.maxLocals,
     argsSize: method.argsSize,
-    instructions
+    instructions,
+    className
   };
 }
 
-function normalizeInstruction(instr) {
-  const { op, args, comment, offset } = instr;
+function normalizeInstruction(instr, offsetMap, className) {
+  const { op, args, comment, offset, ownerClass } = instr;
 
   if (op.includes('_')) {
     const [base, suffix] = op.split('_');
@@ -68,6 +69,8 @@ function normalizeInstruction(instr) {
     case 'SIPUSH':
     case 'ILOAD':
     case 'ISTORE':
+    case 'ALOAD':
+    case 'ASTORE':
     case 'IINC':
       normalized.args = args.map((arg) =>
         arg.kind === 'int' ? { kind: 'int', value: arg.value } : arg
@@ -99,13 +102,13 @@ function normalizeInstruction(instr) {
     case 'PUTSTATIC':
     case 'GETFIELD':
     case 'PUTFIELD':
-      normalized.args = [parseFieldReference(comment)];
+      normalized.args = [parseFieldReference(comment, ownerClass || className || null)];
       break;
     case 'INVOKEVIRTUAL':
     case 'INVOKESTATIC':
     case 'INVOKESPECIAL':
     case 'INVOKEINTERFACE':
-      normalized.args = [parseMethodReference(comment)];
+      normalized.args = [parseMethodReference(comment, ownerClass || className || null)];
       break;
     case 'NEW':
     case 'ANEWARRAY':
@@ -141,10 +144,19 @@ function parseLdcValue(comment) {
   return { kind: 'raw', value: comment };
 }
 
-function parseFieldReference(comment) {
+function parseFieldReference(comment, defaultClassName = null) {
   if (!comment) return { kind: 'raw', value: null };
   const match = /^Field\s+([^\.]+(?:\.[^\.]+)*)\.([^:]+):(.*)$/.exec(comment);
   if (!match) {
+    const scopedMatch = /^Field\s+([^:]+):(.*)$/.exec(comment);
+    if (scopedMatch && defaultClassName) {
+      return {
+        kind: 'field',
+        className: defaultClassName,
+        fieldName: scopedMatch[1],
+        descriptor: scopedMatch[2].trim()
+      };
+    }
     return { kind: 'raw', value: comment };
   }
   return {
@@ -155,10 +167,19 @@ function parseFieldReference(comment) {
   };
 }
 
-function parseMethodReference(comment) {
+function parseMethodReference(comment, defaultClassName = null) {
   if (!comment) return { kind: 'raw', value: null };
   const match = /^Method\s+([^\.]+(?:\.[^\.]+)*)\.([^:(]+):(.*)$/.exec(comment);
   if (!match) {
+    const scopedMatch = /^Method\s+"?([^"\s]+)"?:(.*)$/.exec(comment);
+    if (scopedMatch && defaultClassName) {
+      return {
+        kind: 'method',
+        className: defaultClassName,
+        methodName: scopedMatch[1],
+        descriptor: scopedMatch[2].trim(),
+      };
+    }
     return { kind: 'raw', value: comment };
   }
   return {

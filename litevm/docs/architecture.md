@@ -4,7 +4,7 @@ LiteVM follows a three-stage pipeline:
 
 1. **Discovery** – The CLI invokes the host `jar` tool to enumerate `.class` entries inside the supplied archive. Inner classes are preserved.
 2. **Disassembly** – Each class is disassembled lazily using `javap -classpath <jar> -c -verbose <class>`. The textual output is parsed into a high-level intermediate representation (IR) that captures constant pool references, fields, and per-method instruction streams.
-3. **Emission** – The IR is serialized into a JavaScript module. A micro-runtime (`runtime/runtime.js`) provides a stack machine that evaluates IR instructions at runtime, mirroring the JVM execution model for the supported opcode subset.
+3. **Emission** – The IR is serialized into a JavaScript module. A micro-runtime (`runtime/runtime.js`) provides a stack machine that evaluates IR instructions at runtime, mirroring the JVM execution model for the supported opcode subset. The runtime now exposes a minimal heap for object instances, tracks static fields, and can service constructors/instance access for classes discovered in the input JAR.
 
 ## Intermediate Representation
 
@@ -13,7 +13,7 @@ The IR is JSON-friendly and structured per class:
 - `className`: fully qualified name (`java/lang/Object`).
 - `superName`: optional parent class (defaults to `java/lang/Object`).
 - `methods`: array of methods with `name`, `descriptor`, `maxStack`, `maxLocals`, and `instructions`.
-- `instructions`: array of `{ op: string, args: any[] }` tuples, enriched with metadata extracted from `javap` comments.
+- `instructions`: array of `{ op: string, args: any[] }` tuples, enriched with metadata extracted from `javap` comments (method/field references are fully qualified, even when `javap` elides the class name).
 
 Example snippet:
 
@@ -45,6 +45,7 @@ The generated bundle embeds:
   - A stack array and frame pointer.
   - Opcode handlers keyed by mnemonic (see `runtime/runtime.js`).
   - Local variable storage per frame and branch dispatch via pre-resolved instruction indices.
+  - A tiny heap/object model: `NEW`, `ALOAD/ASTORE`, `GETFIELD/PUTFIELD`, and `GETSTATIC/PUTSTATIC` are executed against JS-backed structures with sensible JVM default values.
 - A `Bridge` API that lets host code plug in native functions (e.g., rendering hooks).
 - A manifest mapping class + method descriptors to instruction arrays.
 
@@ -55,7 +56,7 @@ When a method is invoked, the runtime:
 3. Applies branch offsets by manipulating the instruction pointer.
 4. Returns results to the caller or pushes them onto the parent frame stack.
 
-The runtime is intentionally tiny (~8 KB unminified) and designed for future optimization passes such as peephole folding or partial evaluation.
+The runtime is intentionally tiny (~8 KB unminified) and designed for future optimization passes such as peephole folding or partial evaluation. Recent extensions for objects/fields lay the groundwork for upcoming array, exception, and reflection support.
 
 ## Extensibility
 

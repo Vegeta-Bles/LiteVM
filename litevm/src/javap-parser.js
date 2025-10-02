@@ -31,8 +31,17 @@ export function parseJavapDisassembly(text) {
     if (!currentMethod) {
       const methodMatch = METHOD_SIGNATURE_REGEX.exec(line);
       if (methodMatch) {
+        let methodName = methodMatch[1];
+        const simpleClassName = ir.className?.split('/').pop();
+        if (methodName === simpleClassName) {
+          methodName = '<init>';
+        }
+        if (methodName === 'static') {
+          methodName = '<clinit>';
+        }
+
         currentMethod = {
-          name: methodMatch[1],
+          name: methodName,
           descriptor: null,
           flags: [],
           maxStack: 0,
@@ -91,7 +100,13 @@ export function parseJavapDisassembly(text) {
         const remainder = instructionMatch[3] ?? '';
         const [rawArgs, comment] = splitComment(remainder);
         const args = parseArgs(rawArgs);
-        currentMethod.instructions.push({ offset, op: mnemonic, args, comment });
+        currentMethod.instructions.push({
+          offset,
+          op: mnemonic,
+          args,
+          comment,
+          ownerClass: ir.className,
+        });
         continue;
       }
 
