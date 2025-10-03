@@ -20,6 +20,24 @@ function normalizeMethod(method, className) {
     normalizeInstruction(instr, offsetMap, className)
   );
 
+  const handlers = (method.exceptionHandlers || []).map((handler) => {
+    const start = offsetMap.has(handler.start)
+      ? offsetMap.get(handler.start)
+      : 0;
+    const end = offsetMap.has(handler.end)
+      ? offsetMap.get(handler.end)
+      : instructions.length;
+    const target = offsetMap.has(handler.handler)
+      ? offsetMap.get(handler.handler)
+      : instructions.length - 1;
+    return {
+      start,
+      end,
+      handler: target,
+      type: handler.type || null,
+    };
+  });
+
   // Resolve branch targets to indices for faster runtime jumps
   for (const instruction of instructions) {
     if (!instruction.args) continue;
@@ -43,7 +61,8 @@ function normalizeMethod(method, className) {
     maxLocals: method.maxLocals,
     argsSize: method.argsSize,
     instructions,
-    className
+    className,
+    exceptionHandlers: handlers,
   };
 }
 

@@ -1,3 +1,5 @@
+const THROW_FLAG = Symbol('litevm.throw');
+
 export class LiteVMRuntime {
   static bootstrap(manifest) {
     return new LiteVMRuntime(manifest);
@@ -35,7 +37,11 @@ export class LiteVMRuntime {
     if (!method) {
       throw new Error(`Unknown virtual method ${className}.${methodName}${descriptor}`);
     }
-    return this._executeMethod({ method, args, instance });
+    const result = this._executeMethod({ method, args, instance });
+    if (this._isThrowResult(result)) {
+      throw this._toHostError(result.value);
+    }
+    return result;
   }
 
   invokeStatic(className, methodName, descriptor, args = []) {
@@ -43,7 +49,11 @@ export class LiteVMRuntime {
     if (!method) {
       throw new Error(`Unknown static method ${className}.${methodName}${descriptor}`);
     }
-    return this._executeMethod({ method, args, instance: null });
+    const result = this._executeMethod({ method, args, instance: null });
+    if (this._isThrowResult(result)) {
+      throw this._toHostError(result.value);
+    }
+    return result;
   }
 
   _lookupClass(className) {
@@ -97,7 +107,8 @@ export class LiteVMRuntime {
       locals: new Array(method.maxLocals).fill(null),
       stack: [],
       ip: 0,
-      instance
+      instance,
+      handlers: method.exceptionHandlers || [],
     };
 
     let localIndex = 0;
@@ -112,8 +123,16 @@ export class LiteVMRuntime {
     while (frame.ip < method.instructions.length) {
       const instr = method.instructions[frame.ip];
       const result = this._dispatch(instr, frame);
-      if (result && result.type === 'return') {
-        return result.value;
+      if (result) {
+        if (result.type === 'return') {
+          return result.value;
+        }
+        if (result.type === 'throw') {
+          if (this._handleException(frame, result.value)) {
+            continue;
+          }
+          return this._throwResult(result.value);
+        }
       }
       frame.ip += 1;
     }
@@ -125,6 +144,9 @@ export class LiteVMRuntime {
     const { op, args = [] } = instr;
     switch (op) {
       case 'NOP':
+        return;
+      case 'ACONST_NULL':
+        frame.stack.push(null);
         return;
       case 'ACONST_NULL':
         frame.stack.push(null);
@@ -204,8 +226,17 @@ export class LiteVMRuntime {
         if (op === 'IADD') result = a + b;
         else if (op === 'ISUB') result = a - b;
         else if (op === 'IMUL') result = Math.imul(a, b);
-        else if (op === 'IDIV') result = (a / b) | 0;
-        else if (op === 'IREM') result = a % b;
+        else if (op === 'IDIV') {
+          if (b === 0) {
+            return { type: 'throw', value: this._instantiateBuiltinException('java/lang/ArithmeticException', 'Division by zero') };
+          }
+          result = (a / b) | 0;
+        } else if (op === 'IREM') {
+          if (b === 0) {
+            return { type: 'throw', value: this._instantiateBuiltinException('java/lang/ArithmeticException', 'Division by zero') };
+          }
+          result = a % b;
+        }
         frame.stack.push(result);
         return;
       }
@@ -290,6 +321,13 @@ export class LiteVMRuntime {
         this._arrayStore(arrayRef, this._arrayOpType(op), index, value);
         return;
       }
+      case 'ATHROW': {
+        const throwable = frame.stack.pop();
+        if (!throwable) {
+          return { type: 'throw', value: this._instantiateBuiltinException('java/lang/NullPointerException', 'Throwing null') };
+        }
+        return { type: 'throw', value: throwable };
+      }
       case 'GOTO': {
         const target = args[0]?.value ?? 0;
         frame.ip = target - 1;
@@ -362,6 +400,9 @@ export class LiteVMRuntime {
           throw new Error(`Missing static target ${ref.className}.${ref.methodName}${ref.descriptor}`);
         }
         const result = this._executeMethod({ method: targetMethod, args: callArgs, instance: null });
+        if (this._isThrowResult(result)) {
+          return { type: 'throw', value: result.value };
+        }
         if (!this._isVoidDescriptor(ref.descriptor)) {
           frame.stack.push(result);
         }
@@ -384,6 +425,9 @@ export class LiteVMRuntime {
         let value;
         if (targetMethod) {
           value = this._executeMethod({ method: targetMethod, args: callArgs, instance });
+          if (this._isThrowResult(value)) {
+            return { type: 'throw', value: value.value };
+          }
         } else {
           const bridgeKey = this._bridgeKey(ref.className, `${ref.methodName}:${ref.descriptor}`);
           const bridge = this.bridges.get(bridgeKey);
@@ -413,6 +457,9 @@ export class LiteVMRuntime {
           throw new Error(`Missing special target ${ref.className}.${ref.methodName}${ref.descriptor}`);
         }
         const result = this._executeMethod({ method: targetMethod, args: callArgs, instance });
+        if (this._isThrowResult(result)) {
+          return { type: 'throw', value: result.value };
+        }
         if (!this._isVoidDescriptor(ref.descriptor)) {
           frame.stack.push(result);
         }
@@ -471,6 +518,38 @@ export class LiteVMRuntime {
 
   _isVoidDescriptor(descriptor) {
     return descriptor.endsWith(')V');
+  }
+
+  _handleException(frame, throwable) {
+    const handlers = frame.handlers || [];
+    for (const handler of handlers) {
+      if (frame.ip >= handler.start && frame.ip < handler.end) {
+        if (!handler.type || this._isInstanceOf(throwable, handler.type)) {
+          frame.stack = [throwable];
+          frame.ip = handler.handler;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  _isInstanceOf(value, targetClass) {
+    if (!targetClass) return true;
+    if (!value || typeof value !== 'object') return false;
+    if (targetClass === 'java/lang/Object') return true;
+    let current = value.__litevmClass;
+    while (current) {
+      if (current === targetClass) {
+        return true;
+      }
+      const cls = this._lookupClass(current);
+      if (!cls || !cls.superName || cls.superName === current) {
+        break;
+      }
+      current = cls.superName;
+    }
+    return false;
   }
 
   _allocateObject(className) {
@@ -542,6 +621,29 @@ export class LiteVMRuntime {
       default:
         return null;
     }
+  }
+
+  _instantiateBuiltinException(className, message = '') {
+    const exception = this._allocateObject(className);
+    exception.fields.message = message;
+    exception.fields.detailMessage = message;
+    return exception;
+  }
+
+  _isThrowResult(result) {
+    return Boolean(result && result[THROW_FLAG]);
+  }
+
+  _throwResult(value) {
+    return { [THROW_FLAG]: true, value };
+  }
+
+  _toHostError(throwable) {
+    const className = throwable?.__litevmClass || 'java/lang/Throwable';
+    const message = throwable?.fields?.message ?? throwable?.message ?? '';
+    const error = new Error(`Uncaught Java exception ${className}${message ? `: ${message}` : ''}`);
+    error.javaException = throwable;
+    return error;
   }
 
   _descriptorFromPrimitiveToken(token = 'int') {

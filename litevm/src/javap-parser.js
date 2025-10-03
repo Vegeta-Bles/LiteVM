@@ -138,6 +138,11 @@ export function parseJavapDisassembly(text) {
         continue;
       }
 
+      if (trimmed.startsWith('Exception table:')) {
+        inExceptionTable = true;
+        continue;
+      }
+
       if (
         trimmed === '' ||
         trimmed.startsWith('LineNumberTable') ||
@@ -152,6 +157,7 @@ export function parseJavapDisassembly(text) {
         }
         currentMethod = null;
         inCode = false;
+        inExceptionTable = false;
         continue;
       }
     }

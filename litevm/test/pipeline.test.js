@@ -10,6 +10,7 @@ import { compileJar } from '../src/pipeline.js';
 const SAMPLE_JAVA = new URL('../samples/Sample.java', import.meta.url);
 const OBJECT_SAMPLE_JAVA = new URL('../samples/ObjectSample.java', import.meta.url);
 const ARRAY_SAMPLE_JAVA = new URL('../samples/ArraySample.java', import.meta.url);
+const EXCEPTION_SAMPLE_JAVA = new URL('../samples/ExceptionSample.java', import.meta.url);
 
 function run(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -41,6 +42,7 @@ test('compiles sample jar and executes add method', async (t) => {
     fileURLToPath(SAMPLE_JAVA),
     fileURLToPath(OBJECT_SAMPLE_JAVA),
     fileURLToPath(ARRAY_SAMPLE_JAVA),
+    fileURLToPath(EXCEPTION_SAMPLE_JAVA),
   ]);
   await run('jar', ['cf', jarPath, '-C', classesDir, '.']);
 
@@ -108,4 +110,24 @@ test('compiles sample jar and executes add method', async (t) => {
   assert.ok(objectArray?.__litevmArray, 'expected object array instance');
   assert.equal(objectArray.length, 3);
   assert.equal(objectArray.data[0]?.__litevmClass, 'java/lang/Object');
+
+  const safeDivideZero = runtime.invokeStatic(
+    'ExceptionSample',
+    'safeDivide',
+    '(II)I',
+    [10, 0],
+  );
+  assert.equal(safeDivideZero, 0);
+
+  const safeDivideNormal = runtime.invokeStatic(
+    'ExceptionSample',
+    'safeDivide',
+    '(II)I',
+    [20, 5],
+  );
+  assert.equal(safeDivideNormal, 4);
+
+  assert.throws(() => {
+    runtime.invokeStatic('ExceptionSample', 'divide', '(II)I', [10, 0]);
+  }, /ArithmeticException/);
 });
