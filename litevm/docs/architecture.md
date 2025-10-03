@@ -46,6 +46,8 @@ The generated bundle embeds:
   - Opcode handlers keyed by mnemonic (see `runtime/runtime.js`).
   - Local variable storage per frame and branch dispatch via pre-resolved instruction indices.
   - A tiny heap/object/array model: `NEW`, `ALOAD/ASTORE`, `NEWARRAY/ANEWARRAY`, `ARRAYLENGTH`, `xALOAD/xASTORE`, `GETFIELD/PUTFIELD`, and `GETSTATIC/PUTSTATIC` are executed against JS-backed structures with sensible JVM default values.
+  - Structured exception handling: exception tables parsed from `javap` drive catcher selection when `ATHROW` or runtime-generated failures (e.g., division by zero) occur.
+  - Default bridge registration helpers for WebGL, WebAudio, WebSocket, and file IO to ease host integration prototyping.
 - A `Bridge` API that lets host code plug in native functions (e.g., rendering hooks).
 - A manifest mapping class + method descriptors to instruction arrays.
 

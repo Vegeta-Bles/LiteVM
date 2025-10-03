@@ -28,5 +28,5 @@ Deliver a lightweight Java bytecode to browser runtime toolchain that can load `
 
 ## Incremental Plan
 - **Phase 1 (✅)** – Object instantiation, static/instance fields, and primitive/reference array opcodes.
-- **Phase 2** – Exception tables, `ATHROW`, and try/catch dispatch in the interpreter.
-- **Phase 3** – Reflection metadata plus bridge surfaces for WebGL/WebAudio/WebSocket/File APIs.
+- **Phase 2 (✅)** – Exception tables, `ATHROW`, runtime-generated exceptions (division/modulo by zero), and try/catch dispatch in the interpreter.
+- **Phase 3** – Reflection metadata plus hardened bridge surfaces for WebGL/WebAudio/WebSocket/File APIs (baseline stubs ship in `runtime/bridges/default.js`).
