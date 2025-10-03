@@ -130,4 +130,10 @@ test('compiles sample jar and executes add method', async (t) => {
   assert.throws(() => {
     runtime.invokeStatic('ExceptionSample', 'divide', '(II)I', [10, 0]);
   }, /ArithmeticException/);
+
+  assert.ok(runtime.listClasses().includes('ExceptionSample'));
+
+  const objectMeta = runtime.getClassMetadata('ObjectSample');
+  assert.ok(objectMeta, 'metadata available for ObjectSample');
+  assert.ok(objectMeta.fields.some((field) => field.name === 'counter' && field.descriptor === 'I'));
 });

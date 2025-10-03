@@ -1,5 +1,6 @@
 const HEADER_CLASS_REGEX = /class\s+([^\s{]+)(?:\s+extends\s+([^\s{]+))?/;
 const METHOD_SIGNATURE_REGEX = /^(?:\s*)(?:[\w\[\]$.<>]+\s+)*([\w$<>]+)\(([^)]*)\);/;
+const FIELD_SIGNATURE_REGEX = /^(?:\s*)(?:[\w\[\]$.<>]+\s+)*([\w$]+);$/;
 
 export function parseJavapDisassembly(text) {
   const lines = text.split(/\r?\n/);
@@ -11,6 +12,7 @@ export function parseJavapDisassembly(text) {
   };
 
   let currentMethod = null;
+  let currentField = null;
   let inCode = false;
   let inExceptionTable = false;
 
@@ -29,9 +31,33 @@ export function parseJavapDisassembly(text) {
       }
     }
 
+    if (currentField) {
+      if (trimmed.startsWith('descriptor:')) {
+        currentField.descriptor = trimmed.split(':')[1].trim();
+        continue;
+      }
+      if (trimmed.startsWith('flags:')) {
+        const flagsPart = trimmed.split(':')[1].trim();
+        currentField.flags = flagsPart
+          .split(/[\s,]+/)
+          .map((token) => token.replace(/[()]/g, ''))
+          .filter((token) => token.startsWith('ACC_'));
+        continue;
+      }
+      if (trimmed === '') {
+        ir.fields.push(currentField);
+        currentField = null;
+        continue;
+      }
+    }
+
     if (!currentMethod) {
       const methodMatch = METHOD_SIGNATURE_REGEX.exec(line);
       if (methodMatch) {
+        if (currentField) {
+          ir.fields.push(currentField);
+          currentField = null;
+        }
         let methodName = methodMatch[1];
         const simpleClassName = ir.className?.split('/').pop();
         if (methodName === simpleClassName) {
@@ -53,6 +79,18 @@ export function parseJavapDisassembly(text) {
         };
         continue;
       }
+
+      const fieldMatch = FIELD_SIGNATURE_REGEX.exec(trimmed);
+      if (fieldMatch) {
+        currentField = {
+          name: fieldMatch[1],
+          descriptor: null,
+          flags: [],
+          className: ir.className,
+        };
+        continue;
+      }
+
       continue;
     }
 
@@ -165,6 +203,10 @@ export function parseJavapDisassembly(text) {
 
   if (currentMethod) {
     ir.methods.push(currentMethod);
+  }
+
+  if (currentField) {
+    ir.fields.push(currentField);
   }
 
   return ir;

@@ -9,6 +9,7 @@ LiteVM is an experimental drop-in alternative to TeaVM designed for rapid build 
 - **Streaming pipeline** – classes are disassembled on demand and transformed into a structured IR for emission.
 - **Tiny runtime** – a ~8 KB JS stack machine executes IR with pluggable bridges for host integration and now supports basic object instantiation, primitive/reference arrays, instance/static fields, reference locals, and structured exception handling (`try`/`catch`, `ATHROW`).
 - **Modular design** – extend opcode handlers and runtime bridges without touching the CLI.
+- **Reflection helpers** – `runtime.listClasses()` / `runtime.getClassMetadata()` expose parsed method/field signatures for host-side tooling.
 
 ## Quick Start
 ```bash
@@ -22,11 +23,29 @@ node src/cli.js --jar path/to/game.jar --out dist/game.bundle.js
 node dist/game.bundle.js
 ```
 
-See `docs/mvp.md` for scope details and `docs/architecture.md` for the IR + runtime design, including notes on the new object model, array heap, and exception handling pipeline.
+See `docs/mvp.md` for scope details and `docs/architecture.md` for the IR + runtime design, including notes on the new object model, array heap, exception handling pipeline, and reflection metadata.
 
 ## Roadmap
 - Expand opcode coverage (object creation, method invocation, arrays).
 - WebAssembly backend fed from the same IR.
-- Harden the default bridge layer for WebGL/WebAudio/WebSocket/File APIs (stubs ship today for fast prototyping).
+- Harden the default bridge layer for WebGL/WebAudio/WebSocket/File APIs (baseline stubs ship today for fast prototyping).
+
+### Bridge Stubs
+
+A convenience installer registers no-op Web integrations so compiled apps can boot before wiring real APIs:
+
+```js
+import { LiteVMRuntime } from './runtime/runtime.js';
+import { installDefaultBridges } from './runtime/bridges/default.js';
+
+const runtime = LiteVMRuntime.bootstrap(manifest);
+installDefaultBridges(runtime, {
+  logger: console.debug,
+  createWebGLContext: (canvasId) => new RealWebGL(canvasId),
+  createAudioContext: () => realAudioCtx,
+  createWebSocket: (url) => new WebSocket(url),
+  createFileBridge: () => realFileBridge,
+});
+```
 
 Contributions welcome—file issues with sample jars that expose unsupported opcodes.

@@ -6,7 +6,8 @@ function normalizeClass(irClass) {
   return {
     className: irClass.className,
     superName: irClass.superName,
-    methods: irClass.methods.map((method) => normalizeMethod(method, irClass.className))
+    methods: irClass.methods.map((method) => normalizeMethod(method, irClass.className)),
+    fields: (irClass.fields || []).map((field) => normalizeField(field, irClass.className))
   };
 }
 
@@ -63,6 +64,15 @@ function normalizeMethod(method, className) {
     instructions,
     className,
     exceptionHandlers: handlers,
+  };
+}
+
+function normalizeField(field, className) {
+  return {
+    name: field.name,
+    descriptor: field.descriptor,
+    flags: field.flags || [],
+    className: field.className || className,
   };
 }
 

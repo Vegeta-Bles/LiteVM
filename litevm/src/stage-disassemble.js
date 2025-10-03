@@ -8,7 +8,7 @@ export async function disassembleClass({ jarPath, className }) {
 
 function runJavap({ jarPath, className }) {
   return new Promise((resolve, reject) => {
-    const args = ['-classpath', jarPath, '-c', '-verbose', className];
+    const args = ['-p', '-classpath', jarPath, '-c', '-verbose', className];
     const proc = spawn('javap', args);
     let stdout = '';
     let stderr = '';

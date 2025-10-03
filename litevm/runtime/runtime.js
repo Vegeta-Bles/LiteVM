@@ -11,15 +11,32 @@ export class LiteVMRuntime {
     this.staticFields = new Map();
     this.heap = new Map();
     this.nextObjectId = 1;
+    this.classMetadata = new Map();
 
     for (const cls of manifest) {
       const normalizedName = cls.className.replace(/\\\\/g, '/');
+      const methodMetadata = cls.methods.map((method) => ({
+        name: method.name,
+        descriptor: method.descriptor,
+        flags: method.flags,
+      }));
+      const fieldMetadata = (cls.fields || []).map((field) => ({
+        name: field.name,
+        descriptor: field.descriptor,
+        flags: field.flags || [],
+      }));
       const methods = new Map();
       for (const method of cls.methods) {
         const key = this._methodKey(method.name, method.descriptor);
         methods.set(key, { ...method, instructions: method.instructions });
       }
       this.classes.set(normalizedName, { ...cls, methods });
+      this.classMetadata.set(normalizedName, {
+        className: normalizedName,
+        superName: cls.superName,
+        methods: methodMetadata,
+        fields: fieldMetadata,
+      });
     }
   }
 
@@ -99,6 +116,22 @@ export class LiteVMRuntime {
 
   _bridgeKey(className, signature) {
     return `${className}#${signature}`;
+  }
+
+  listClasses() {
+    return Array.from(this.classMetadata.keys());
+  }
+
+  getClassMetadata(className) {
+    const key = this._normalizeClassName(className);
+    const metadata = this.classMetadata.get(key);
+    if (!metadata) return null;
+    return {
+      className: metadata.className,
+      superName: metadata.superName,
+      methods: metadata.methods.map((method) => ({ ...method })),
+      fields: metadata.fields.map((field) => ({ ...field })),
+    };
   }
 
   _executeMethod({ method, args, instance }) {
@@ -631,7 +664,7 @@ export class LiteVMRuntime {
   }
 
   _isThrowResult(result) {
-    return Boolean(result && result[THROW_FLAG]);
+    return Boolean(result && typeof result === 'object' && result !== null && result[THROW_FLAG]);
   }
 
   _throwResult(value) {
@@ -770,5 +803,9 @@ export class LiteVMRuntime {
       default:
         return 'A';
     }
+  }
+
+  _normalizeClassName(className) {
+    return className.replace(/[.\\\\]/g, '/');
   }
 }
