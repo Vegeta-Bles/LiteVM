@@ -28,7 +28,7 @@ npm run opcodes
 # 5. Optional: compare against the full JVM opcode catalog
 npm run opcodes:missing
 
-# 6. Optional: sample opcode usage from a jar (limit classes to keep things quick)
+# 6. Optional: sample opcode usage from a jar (limit classes to keep things quick) (using my Minecraft-Web directory as an    example)
 npm run opcodes:usage -- --jar ../Minecraft-Web/client.jar --limit 150
 ```
 
