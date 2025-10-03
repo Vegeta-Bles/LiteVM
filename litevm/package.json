@@ -9,7 +9,8 @@
   "scripts": {
     "build": "node scripts/build.js",
     "dev": "node src/cli.js",
-    "test": "node --test"
+    "test": "node --test",
+    "opcodes": "node scripts/opcode-report.js"
   },
   "keywords": [
     "java",

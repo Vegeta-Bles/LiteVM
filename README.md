@@ -21,6 +21,9 @@ node src/cli.js --jar path/to/game.jar --out dist/game.bundle.js
 
 # 3. Execute the bundle in Node (or embed in the browser)
 node dist/game.bundle.js
+
+# 4. Optional: inspect supported opcodes
+npm run opcodes
 ```
 
 See `docs/mvp.md` for scope details and `docs/architecture.md` for the IR + runtime design, including notes on the new object model, array heap, exception handling pipeline, and reflection metadata.
