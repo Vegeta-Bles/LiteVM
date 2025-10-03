@@ -74,6 +74,32 @@ export function parseJavapDisassembly(text) {
         continue;
       }
     } else {
+      if (inExceptionTable) {
+        if (trimmed === '' || trimmed.startsWith('LineNumberTable')) {
+          inExceptionTable = false;
+          if (trimmed === '') {
+            if (currentMethod.instructions.length || currentMethod.exceptionHandlers.length) {
+              ir.methods.push(currentMethod);
+            }
+            currentMethod = null;
+            inCode = false;
+          }
+          continue;
+        }
+
+        const exceptionMatch = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(Class\s+([\w\./$]+)|any)$/i.exec(trimmed);
+        if (exceptionMatch) {
+          const typeToken = exceptionMatch[5] ? exceptionMatch[5].replace(/\./g, '/') : null;
+          currentMethod.exceptionHandlers.push({
+            start: Number(exceptionMatch[1]),
+            end: Number(exceptionMatch[2]),
+            handler: Number(exceptionMatch[3]),
+            type: typeToken,
+          });
+        }
+        continue;
+      }
+
       if (trimmed.startsWith('stack=')) {
         const metrics = trimmed.split(',').map((part) => part.trim());
         for (const metric of metrics) {
