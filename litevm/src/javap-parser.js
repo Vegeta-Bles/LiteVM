@@ -12,6 +12,7 @@ export function parseJavapDisassembly(text) {
 
   let currentMethod = null;
   let inCode = false;
+  let inExceptionTable = false;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
@@ -47,7 +48,8 @@ export function parseJavapDisassembly(text) {
           maxStack: 0,
           maxLocals: 0,
           argsSize: 0,
-          instructions: []
+          instructions: [],
+          exceptionHandlers: []
         };
         continue;
       }
