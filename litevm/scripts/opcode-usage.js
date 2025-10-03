@@ -27,7 +27,10 @@ function parseArgs(argv) {
 }
 
 function listClasses(jarPath) {
-  const result = spawnSync('jar', ['tf', jarPath], { encoding: 'utf8' });
+  const result = spawnSync('jar', ['tf', jarPath], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (result.status !== 0) {
     throw new Error(`jar tf failed: ${result.stderr}`);
   }
@@ -92,4 +95,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
