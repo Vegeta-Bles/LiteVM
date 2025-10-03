@@ -1,4 +1,4 @@
-# LiteVM
+# LiteVM J2JS
 
 LiteVM is an experimental drop-in alternative to TeaVM designed for rapid build times, predictable output, and a dramatically reduced runtime surface. It translates Java bytecode from `.jar` archives into compact JavaScript bundles that run on top of a tiny stack-machine.
 
