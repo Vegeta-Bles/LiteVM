@@ -24,6 +24,12 @@ node dist/game.bundle.js
 
 # 4. Optional: inspect supported opcodes
 npm run opcodes
+
+# 5. Optional: compare against the full JVM opcode catalog
+npm run opcodes:missing
+
+# 6. Optional: sample opcode usage from a jar (limit classes to keep things quick)
+npm run opcodes:usage -- --jar ../Minecraft-Web/client.jar --limit 150
 ```
 
 See `docs/mvp.md` for scope details and `docs/architecture.md` for the IR + runtime design, including notes on the new object model, array heap, exception handling pipeline, and reflection metadata.

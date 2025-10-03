@@ -10,7 +10,9 @@
     "build": "node scripts/build.js",
     "dev": "node src/cli.js",
     "test": "node --test",
-    "opcodes": "node scripts/opcode-report.js"
+    "opcodes": "node scripts/opcode-report.js",
+    "opcodes:missing": "node scripts/opcode-diff.js",
+    "opcodes:usage": "node scripts/opcode-usage.js"
   },
   "keywords": [
     "java",
